@@ -1,185 +1,139 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MapContainer, TileLayer, LayersControl, Polyline, CircleMarker, Tooltip, useMap } from 'react-leaflet';
-import { Play, Pause, RotateCcw, MapPinned, Satellite, Clock3, ChevronRight, LocateFixed } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
+import { Play, Pause, RotateCcw, Clock3, MapPinned, Satellite, Map as MapIcon, Info } from 'lucide-react';
 import './styles.css';
 
-const phases = [
-  { year: 1950, label: 'Early settlement roads', labelAr: 'بدايات شبكة الطرق', note: 'Early road development concentrated around Doha and nearby settlements.' },
-  { year: 1960, label: 'First urban expansion', labelAr: 'التوسع العمراني الأول', note: 'Urban connections begin extending west and south from Doha.' },
-  { year: 1970, label: 'Rapid national growth', labelAr: 'النمو الوطني المتسارع', note: 'New regional links support expanding residential and industrial areas.' },
-  { year: 1980, label: 'Municipal network growth', labelAr: 'نمو الشبكة البلدية', note: 'Primary road corridors increasingly connect major population centres.' },
-  { year: 1990, label: 'Metropolitan expansion', labelAr: 'التوسع الحضري', note: 'Doha and surrounding municipalities become more strongly interconnected.' },
-  { year: 2000, label: 'Modernisation', labelAr: 'مرحلة التحديث', note: 'Major arterial and ring-road connectivity accelerates.' },
-  { year: 2010, label: 'National infrastructure era', labelAr: 'عصر البنية التحتية الوطنية', note: 'Expressway-scale development reshapes mobility across Qatar.' },
-  { year: 2020, label: 'Integrated mobility network', labelAr: 'شبكة تنقل متكاملة', note: 'High-capacity corridors connect major new urban growth zones.' },
-  { year: 2026, label: 'Today', labelAr: 'اليوم', note: 'A mature national road network links Qatar’s municipalities and urban centres.' },
+const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+const LOGO_URL = 'https://qatarplatform.net/wp-content/uploads/2024/04/%D8%B4%D8%B9%D8%A7%D8%B1-%D9%88%D8%B2%D8%A7%D8%B1%D8%A9-%D8%A7%D9%84%D8%A8%D9%84%D8%AF%D9%8A%D8%A9-1.png';
+
+const milestones = [
+  { year: 1939, title: 'First oil-era road', ar: 'بداية شبكة الطرق الحديثة', text: 'The first road associated with Qatar’s oil era connected Doha and Dukhan in 1938/39.', focus: {lat:25.34,lng:51.15,zoom:9}, route:'dukhan' },
+  { year: 1948, title: 'Industrial corridor expands', ar: 'توسع طرق الصناعة والطاقة', text: 'A second oil-industry route linked Dukhan with Umm Bab and Mesaieed in 1947/48.', focus:{lat:25.18,lng:51.08,zoom:8}, route:'industrial' },
+  { year: 1950, title: 'Doha begins modern transformation', ar: 'بداية التحول العمراني في الدوحة', text: 'Oil revenues began driving public infrastructure, municipal works and rapid urban change in Doha.', focus:{lat:25.2854,lng:51.5310,zoom:12} },
+  { year: 1963, title: 'A & B Ring roads established', ar: 'ظهور الطريقين الدائريين الأول والثاني', text: 'Historical urban research documents the roads later known as A Ring and B Ring by 1963.', focus:{lat:25.2854,lng:51.505,zoom:12} },
+  { year: 1965, title: 'C Ring outline in place', ar: 'بداية الطريق الدائري الثالث', text: 'The outline of the road later known as C Ring was already in place by 1965.', focus:{lat:25.275,lng:51.495,zoom:11} },
+  { year: 1970, title: 'Regional road system matures', ar: 'توسع الربط بين مناطق الدولة', text: 'Major inter-city routes were upgraded during the 1970s as Doha expanded beyond its early core.', focus:{lat:25.25,lng:51.25,zoom:9}, route:'salwa' },
+  { year: 2010, title: 'Expressway programme accelerates', ar: 'تسارع برنامج الطرق السريعة', text: 'Salwa Road Phase 2 began in 2010 as part of a new generation of high-capacity roads.', focus:{lat:25.23,lng:51.38,zoom:10}, route:'salwaModern' },
+  { year: 2012, title: 'North Road enhancement', ar: 'تطوير طريق الشمال', text: 'The North Road corridor enhancement began in 2012, including major junction and service-road upgrades.', focus:{lat:25.55,lng:51.39,zoom:9}, route:'north' },
+  { year: 2014, title: 'Dukhan Highway modernisation', ar: 'تحديث طريق دخان السريع', text: 'Nine kilometres of the new Dukhan Highway Central opened in July 2014.', focus:{lat:25.34,lng:51.25,zoom:10}, route:'dukhanModern' },
+  { year: 2017, title: 'National expressway leap', ar: 'قفزة في شبكة الطرق السريعة', text: 'G-Ring Road, major Orbital Highway sections and the completed Dukhan Highway Central transformed cross-country movement.', focus:{lat:25.22,lng:51.34,zoom:9}, route:'expressway2017' },
+  { year: 2018, title: 'Southern network integration', ar: 'تكامل شبكة الطرق الجنوبية', text: 'New links connected Doha Expressway with the E, F and G Ring Roads and southern growth areas.', focus:{lat:25.18,lng:51.50,zoom:10}, route:'south2018' },
+  { year: 2020, title: 'Mesaimeer interchange expansion', ar: 'تطوير تقاطع مسيمير', text: 'New sections at Mesaimeer Interchange improved free-flow connectivity between major Doha corridors.', focus:{lat:25.221,lng:51.456,zoom:12}, route:'mesaimeer' },
+  { year: 2022, title: 'D-Ring Road upgrade', ar: 'تطوير الطريق الدائري الرابع', text: 'A 3.5 km section of D-Ring Road was developed and expanded with upgraded intersections.', focus:{lat:25.244,lng:51.506,zoom:12}, route:'dring' },
+  { year: 2026, title: 'Connected Qatar', ar: 'قطر بشبكة مترابطة', text: 'Today’s map shows the mature national road system. Historical overlays remain limited to documented milestones.', focus:{lat:25.35,lng:51.20,zoom:8} }
 ];
 
-// Geographic corridor overlays are illustrative until verified historical GIS layers are supplied.
-const historicalCorridors = [
-  { y:1950, name:'Historic Doha core', coords:[[25.286,51.535],[25.284,51.520],[25.290,51.507]] },
-  { y:1960, name:'Western urban expansion', coords:[[25.286,51.525],[25.291,51.486],[25.295,51.450]] },
-  { y:1960, name:'Southern urban expansion', coords:[[25.280,51.523],[25.255,51.510],[25.226,51.493]] },
-  { y:1970, name:'Doha–Al Wakrah growth corridor', coords:[[25.273,51.530],[25.238,51.548],[25.205,51.574],[25.172,51.603]] },
-  { y:1970, name:'Doha–Al Rayyan growth corridor', coords:[[25.286,51.510],[25.291,51.470],[25.292,51.424]] },
-  { y:1980, name:'Northern metropolitan corridor', coords:[[25.300,51.515],[25.350,51.490],[25.415,51.455]] },
-  { y:1980, name:'South-west regional corridor', coords:[[25.285,51.470],[25.235,51.405],[25.190,51.330]] },
-  { y:1990, name:'Doha–Al Khor regional corridor', coords:[[25.330,51.520],[25.420,51.535],[25.520,51.545],[25.680,51.508]] },
-  { y:2000, name:'West–east metropolitan connection', coords:[[25.300,51.385],[25.295,51.435],[25.292,51.490],[25.290,51.550]] },
-  { y:2000, name:'North–south arterial growth', coords:[[25.180,51.505],[25.260,51.500],[25.360,51.500],[25.470,51.500]] },
-  { y:2010, name:'Lusail growth connection', coords:[[25.320,51.515],[25.370,51.520],[25.420,51.530],[25.505,51.535]] },
-  { y:2010, name:'National northern corridor', coords:[[25.520,51.500],[25.680,51.460],[25.850,51.380],[26.050,51.240]] },
-  { y:2020, name:'Orbital network expansion', coords:[[25.180,51.360],[25.270,51.325],[25.390,51.330],[25.500,51.390],[25.560,51.500]] },
-  { y:2020, name:'Eastern urban network', coords:[[25.210,51.590],[25.280,51.575],[25.360,51.570],[25.450,51.575]] },
-  { y:2026, name:'Integrated national network', coords:[[25.120,51.350],[25.250,51.390],[25.400,51.430],[25.580,51.470],[25.800,51.420],[26.050,51.250]] },
+const routes = {
+  dukhan: {year:1939, name:'Doha–Dukhan historic corridor', path:[[25.2854,51.5310],[25.292,51.425],[25.35,51.23],[25.43,50.79]]},
+  industrial: {year:1948, name:'Dukhan–Umm Bab–Mesaieed industrial corridor', path:[[25.43,50.79],[25.21,50.81],[24.99,51.55]]},
+  salwa: {year:1970, name:'Salwa regional corridor', path:[[25.27,51.49],[25.19,51.34],[25.03,51.10],[24.75,50.84]]},
+  salwaModern: {year:2010, name:'Salwa Road Phase 2 corridor', path:[[25.267,51.497],[25.251,51.444],[25.231,51.385],[25.215,51.325]]},
+  north: {year:2012, name:'North Road / Al Shamal corridor', path:[[25.33,51.45],[25.42,51.40],[25.62,51.38],[25.88,51.30],[26.10,51.20]]},
+  dukhanModern: {year:2014, name:'Dukhan Highway Central corridor', path:[[25.316,51.40],[25.335,51.31],[25.36,51.21]]},
+  expressway2017: {year:2017, name:'2017 expressway openings', path:[[25.12,51.58],[25.15,51.45],[25.20,51.30],[25.29,51.19],[25.38,51.22]]},
+  south2018: {year:2018, name:'Southern Doha expressway links', path:[[25.16,51.55],[25.19,51.50],[25.22,51.45],[25.25,51.43]]},
+  mesaimeer: {year:2020, name:'Mesaimeer Interchange links', path:[[25.213,51.445],[25.221,51.456],[25.236,51.474]]},
+  dring: {year:2022, name:'D-Ring Road development section', path:[[25.226,51.486],[25.238,51.505],[25.252,51.522],[25.263,51.529]]}
+};
+
+const places = [
+  ['Doha',25.2854,51.5310],['Al Rayyan',25.2919,51.4244],['Al Wakrah',25.1715,51.6034],['Umm Salal',25.4149,51.4058],['Al Khor',25.6800,51.5075],['Al Shamal',26.1268,51.2010],['Al Daayen / Lusail',25.5197,51.5478],['Al Shahaniya',25.3705,51.2136],['Dukhan',25.43,50.79],['Mesaieed',24.99,51.55]
 ];
 
-const municipalities = [
-  {name:'Doha', ar:'الدوحة', pos:[25.2854,51.5310]},
-  {name:'Al Rayyan', ar:'الريان', pos:[25.2919,51.4244]},
-  {name:'Al Wakrah', ar:'الوكرة', pos:[25.1715,51.6034]},
-  {name:'Umm Salal', ar:'أم صلال', pos:[25.4149,51.4058]},
-  {name:'Al Khor & Al Thakhira', ar:'الخور والذخيرة', pos:[25.6800,51.5075]},
-  {name:'Al Shamal', ar:'الشمال', pos:[26.1268,51.2010]},
-  {name:'Al Daayen', ar:'الظعاين', pos:[25.5197,51.5478]},
-  {name:'Al Shahaniya', ar:'الشحانية', pos:[25.3705,51.2136]},
-];
+function loadGoogleMaps(){
+  if(window.google?.maps) return Promise.resolve(window.google.maps);
+  if(window.__gmapsPromise) return window.__gmapsPromise;
+  window.__gmapsPromise = new Promise((resolve,reject)=>{
+    const cb='__initMunicipalityGoogleMap';
+    window[cb]=()=>{ resolve(window.google.maps); delete window[cb]; };
+    const s=document.createElement('script');
+    s.src=`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_KEY}&callback=${cb}&v=weekly`;
+    s.async=true; s.defer=true; s.onerror=reject; document.head.appendChild(s);
+  });
+  return window.__gmapsPromise;
+}
 
-function QatarViewButton(){
-  const map = useMap();
-  return <button className="qatar-view-btn" onClick={()=>map.fitBounds([[24.45,50.70],[26.25,51.75]],{padding:[24,24]})}>
-    <LocateFixed size={16}/> Qatar view
-  </button>;
+function GoogleHistoryMap({year,mapType,onMapReady}){
+  const el=useRef(null); const mapRef=useRef(null); const overlays=useRef([]); const markers=useRef([]);
+  useEffect(()=>{
+    if(!GOOGLE_KEY) return;
+    let alive=true;
+    loadGoogleMaps().then(gmaps=>{
+      if(!alive) return;
+      const map=new gmaps.Map(el.current,{center:{lat:25.35,lng:51.20},zoom:8,mapTypeId:mapType,streetViewControl:false,fullscreenControl:true,mapTypeControl:false,gestureHandling:'greedy'});
+      mapRef.current=map; onMapReady?.(map);
+      markers.current=places.map(([name,lat,lng])=>new gmaps.Marker({map,position:{lat,lng},title:name,label:{text:name,color:'#5c1233',fontWeight:'700',fontSize:'11px'}}));
+    });
+    return()=>{alive=false; overlays.current.forEach(o=>o.setMap(null)); markers.current.forEach(m=>m.setMap(null));};
+  },[]);
+
+  useEffect(()=>{ if(mapRef.current) mapRef.current.setMapTypeId(mapType); },[mapType]);
+
+  useEffect(()=>{
+    if(!mapRef.current || !window.google?.maps) return;
+    overlays.current.forEach(o=>o.setMap(null)); overlays.current=[];
+    Object.values(routes).filter(r=>r.year<=year).forEach(r=>{
+      const line=new google.maps.Polyline({
+        map:mapRef.current,
+        path:r.path.map(([lat,lng])=>({lat,lng})),
+        strokeColor:r.year<2000?'#b4873d':'#8a1538',
+        strokeOpacity:.95,
+        strokeWeight:r.year<2000?4:5,
+        geodesic:true,
+        zIndex:10
+      });
+      const mid=r.path[Math.floor(r.path.length/2)];
+      const marker=new google.maps.Marker({map:mapRef.current,position:{lat:mid[0],lng:mid[1]},title:r.name,icon:{path:google.maps.SymbolPath.CIRCLE,scale:4,fillColor:'#ffffff',fillOpacity:1,strokeColor:'#8a1538',strokeWeight:2}});
+      const info=new google.maps.InfoWindow({content:`<div style="font:600 12px Arial;color:#222">${r.name}</div><div style="font:11px Arial;color:#666;margin-top:3px">Documented milestone: ${r.year}. Overlay follows the present-day corridor approximately.</div>`});
+      marker.addListener('click',()=>info.open({map:mapRef.current,anchor:marker}));
+      overlays.current.push(line,marker);
+    });
+  },[year]);
+
+  return <div ref={el} className="google-map"/>;
 }
 
 function App(){
-  const [year,setYear] = useState(1950);
-  const [playing,setPlaying] = useState(false);
-  const [showHistory,setShowHistory] = useState(true);
-  const [showMunicipalities,setShowMunicipalities] = useState(true);
-
-  const phase = useMemo(()=>[...phases].reverse().find(p=>year>=p.year) || phases[0],[year]);
-  const activeRoads = historicalCorridors.filter(r=>r.y<=year);
-
-  useEffect(()=>{
-    if(!playing) return;
-    const t=setInterval(()=>{
-      setYear(v=>{
-        if(v>=2026){ setPlaying(false); return 2026; }
-        return Math.min(2026,v+1);
-      });
-    },90);
-    return ()=>clearInterval(t);
-  },[playing]);
-
-  const jumpTo = y => { setPlaying(false); setYear(y); };
+  const [year,setYear]=useState(1939); const [playing,setPlaying]=useState(false); const [mapType,setMapType]=useState('roadmap'); const mapObj=useRef(null);
+  const current=useMemo(()=>[...milestones].reverse().find(m=>year>=m.year)||milestones[0],[year]);
+  useEffect(()=>{ if(!playing)return; const t=setInterval(()=>setYear(v=>{if(v>=2026){setPlaying(false);return 2026;}return v+1;}),100); return()=>clearInterval(t);},[playing]);
+  useEffect(()=>{ if(mapObj.current&&current.focus) mapObj.current.panTo({lat:current.focus.lat,lng:current.focus.lng}); if(mapObj.current&&current.focus) mapObj.current.setZoom(current.focus.zoom); },[current.year]);
+  const jump=y=>{setPlaying(false);setYear(y)};
 
   return <div className="app-shell">
     <header className="topbar">
-      <div className="brand">
-        <div className="crest" aria-label="Ministry of Municipality identity">
-          <div className="crest-ring">◈</div>
-          <div className="crest-copy"><span>وزارة البلدية</span><b>Ministry of Municipality</b></div>
-        </div>
+      <div className="brand-lockup">
+        <img src={LOGO_URL} alt="Ministry of Municipality - State of Qatar"/>
       </div>
-      <div className="project-title">
-        <span className="eyebrow">INTERACTIVE URBAN HISTORY</span>
-        <h1>Qatar Road Evolution <strong>1950 — 2026</strong></h1>
-      </div>
-      <div className="status-chip"><span></span> LIVE MAP</div>
+      <div className="title-lockup"><span>INTERACTIVE URBAN HISTORY</span><h1>Qatar Road & Urban Development <b>1939 — 2026</b></h1></div>
+      <div className="verified"><span></span> DOCUMENTED MILESTONES</div>
     </header>
 
     <main className="main-grid">
-      <section className="hero-panel">
-        <div className="map-stage real-map-stage">
-          <div className="map-caption">
-            <span>REAL QATAR MAP · HISTORICAL ROAD OVERLAY</span>
-            <b>{year}</b>
-          </div>
-
-          <MapContainer
-            center={[25.45,51.18]}
-            zoom={8}
-            minZoom={7}
-            maxZoom={18}
-            maxBounds={[[24.2,50.3],[26.6,52.2]]}
-            maxBoundsViscosity={0.75}
-            className="real-map"
-            zoomControl={true}
-          >
-            <LayersControl position="bottomright">
-              <LayersControl.BaseLayer checked name="Detailed Street Map">
-                <TileLayer
-                  attribution='&copy; OpenStreetMap contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-              </LayersControl.BaseLayer>
-              <LayersControl.BaseLayer name="Satellite">
-                <TileLayer
-                  attribution='Tiles &copy; Esri'
-                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                />
-              </LayersControl.BaseLayer>
-            </LayersControl>
-
-            {showHistory && activeRoads.map((r,i)=><Polyline
-              key={`${r.y}-${i}`}
-              positions={r.coords}
-              pathOptions={{color:r.y>=2010?'#8A1538':r.y>=1980?'#B77745':'#C9A25F',weight:r.y>=2010?6:5,opacity:.9,lineCap:'round'}}
-            ><Tooltip sticky>{r.name} · illustrative layer · {r.y}</Tooltip></Polyline>)}
-
-            {showMunicipalities && municipalities.map(m=><CircleMarker
-              key={m.name}
-              center={m.pos}
-              radius={6}
-              pathOptions={{color:'#ffffff',weight:2,fillColor:'#8A1538',fillOpacity:1}}
-            ><Tooltip direction="top" offset={[0,-8]} permanent={false}><strong>{m.name}</strong><br/>{m.ar}</Tooltip></CircleMarker>)}
-
-            <QatarViewButton />
-          </MapContainer>
-
-          <div className="map-tools">
-            <button className={showHistory?'active':''} onClick={()=>setShowHistory(v=>!v)}><Clock3 size={16}/> History overlay</button>
-            <button className={showMunicipalities?'active':''} onClick={()=>setShowMunicipalities(v=>!v)}><MapPinned size={16}/> Municipalities</button>
-          </div>
-          <div className="basemap-hint"><Satellite size={14}/> Use the layer control at bottom-right for Street / Satellite</div>
-          <div className="prototype-note">Current map, roads, place names and coastline are live OpenStreetMap/Esri basemap data. Historical coloured corridors are illustrative until verified Ministry GIS or historical map layers are supplied.</div>
-        </div>
+      <section className="map-panel">
+        {!GOOGLE_KEY && <div className="api-key-card"><MapPinned size={34}/><h2>Google Maps API key required</h2><p>Add <b>VITE_GOOGLE_MAPS_API_KEY</b> in Render → Environment, then redeploy. Enable the Maps JavaScript API for the key.</p></div>}
+        {GOOGLE_KEY && <GoogleHistoryMap year={year} mapType={mapType} onMapReady={m=>mapObj.current=m}/>} 
+        <div className="map-overlay-title"><span>QATAR DEVELOPMENT TIMELINE</span><strong>{year}</strong></div>
+        <div className="map-switch"><button className={mapType==='roadmap'?'active':''} onClick={()=>setMapType('roadmap')}><MapIcon size={15}/> Map</button><button className={mapType==='hybrid'?'active':''} onClick={()=>setMapType('hybrid')}><Satellite size={15}/> Satellite</button></div>
+        <div className="accuracy-note"><Info size={13}/> Current geography is from Google Maps. Historical coloured corridors use documented dates; their drawn geometry follows present-day alignments approximately unless an official historical GIS layer is available.</div>
       </section>
 
       <aside className="story-panel">
-        <div className="year-display">
-          <span>YEAR</span>
-          <strong>{year}</strong>
-          <em>{phase.labelAr}</em>
-        </div>
-        <div className="story-card">
-          <div className="story-index"><Clock3 size={18}/> {phase.year}</div>
-          <h2>{phase.label}</h2>
-          <p>{phase.note}</p>
-          <div className="growth-meter"><div style={{width:`${((year-1950)/(2026-1950))*100}%`}}></div></div>
-          <div className="metric-row"><span>Timeline progress</span><b>{Math.round(((year-1950)/(2026-1950))*100)}%</b></div>
-        </div>
+        <div className="year-block"><span>YEAR</span><strong>{year}</strong><em>{current.ar}</em></div>
+        <div className="story-card"><div className="story-year"><Clock3 size={17}/>{current.year}</div><h2>{current.title}</h2><p>{current.text}</p></div>
         <div className="milestones">
-          {phases.map(p=><button key={p.year} className={year>=p.year?'passed':''} onClick={()=>jumpTo(p.year)}>
-            <span>{p.year}</span><i></i><b>{p.label}</b><ChevronRight size={14}/>
-          </button>)}
+          {milestones.map(m=><button key={m.year} className={year>=m.year?'passed':''} onClick={()=>jump(m.year)}><span>{m.year}</span><i></i><b>{m.title}</b></button>)}
         </div>
       </aside>
     </main>
 
     <footer className="timeline-dock">
-      <button className="play-btn" onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={20}/>:<Play size={20} fill="currentColor"/>}</button>
-      <button className="reset-btn" onClick={()=>{setPlaying(false);setYear(1950)}}><RotateCcw size={17}/></button>
-      <div className="slider-wrap">
-        <div className="slider-labels"><span>1950</span><span>1960</span><span>1970</span><span>1980</span><span>1990</span><span>2000</span><span>2010</span><span>2020</span><span>2026</span></div>
-        <input type="range" min="1950" max="2026" value={year} onChange={e=>{setPlaying(false);setYear(Number(e.target.value))}} style={{'--progress':`${((year-1950)/76)*100}%`}}/>
-      </div>
-      <div className="current-phase"><span>CURRENT PHASE</span><b>{phase.label}</b></div>
+      <button className="play" onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={19}/>:<Play size={19} fill="currentColor"/>}</button>
+      <button className="reset" onClick={()=>jump(1939)}><RotateCcw size={16}/></button>
+      <div className="slider"><div className="edge"><span>1939</span><span>2026</span></div><input type="range" min="1939" max="2026" value={year} onChange={e=>jump(Number(e.target.value))} style={{'--p':`${((year-1939)/(2026-1939))*100}%`}}/></div>
+      <div className="phase"><span>CURRENT MILESTONE</span><b>{current.title}</b></div>
     </footer>
-  </div>
+  </div>;
 }
 
 createRoot(document.getElementById('root')).render(<App/>);
