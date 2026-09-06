@@ -5,45 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#65052f" />
     <title>Qatar Historical Places | Ministry of Municipality</title>
-    <style>
-      .brand-lockup{
-        width:310px !important;
-        height:72px !important;
-        display:flex !important;
-        align-items:center !important;
-      }
-      .brand-lockup img{
-        width:220px !important;
-        height:66px !important;
-        max-width:none !important;
-        object-fit:contain !important;
-        object-position:center !important;
-        background:#fff !important;
-        padding:7px 10px !important;
-        border-radius:8px !important;
-        box-shadow:0 0 0 1px rgba(0,0,0,.08) !important;
-      }
-    </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <script>
-      (() => {
-        const applyLogo = () => {
-          const img = document.querySelector('.brand-lockup img');
-          if (!img) return false;
-          if (!img.src.endsWith('/ministry-logo.png')) img.src = '/ministry-logo.png';
-          img.alt = 'Ministry of Municipality - State of Qatar';
-          return true;
-        };
-        if (!applyLogo()) {
-          const observer = new MutationObserver(() => {
-            if (applyLogo()) observer.disconnect();
-          });
-          observer.observe(document.documentElement, { childList: true, subtree: true });
-        }
-      })();
-    </script>
   </body>
 </html>
