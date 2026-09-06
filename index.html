@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#65052f" />
     <title>Qatar Historical Places | Ministry of Municipality</title>
+    <style>
+      /* Header logo visibility fix */
+      .topbar{min-height:96px!important;background:#fff!important}
+      .brand-lockup{
+        width:340px!important;
+        height:84px!important;
+        overflow:visible!important;
+        flex:0 0 340px!important;
+        background:#fff url('/ministry-logo.png?v=20260906f') left center/320px auto no-repeat!important;
+      }
+      .brand-lockup img{visibility:hidden!important;width:1px!important;height:1px!important}
+      @media(max-width:1180px){
+        .brand-lockup{width:290px!important;flex-basis:290px!important;background-size:270px auto!important}
+      }
+      @media(max-width:850px){
+        .brand-lockup{width:205px!important;flex-basis:205px!important;background-size:190px auto!important}
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
