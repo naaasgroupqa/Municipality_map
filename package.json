@@ -1,7 +1,7 @@
 {
   "name": "municipality-road-evolution",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,8 @@
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "^0.468.0"
+    "lucide-react": "^0.468.0",
+    "maplibre-gl": "^5.7.1"
   },
   "devDependencies": {}
 }
