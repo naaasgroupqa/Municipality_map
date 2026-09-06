@@ -5,61 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#65052f" />
     <title>Qatar Historical Places | Ministry of Municipality</title>
-    <style>
-      /* Keep the approved full Ministry logo visible and unclipped */
-      .topbar{
-        min-height:100px!important;
-        background:#fff!important;
-      }
-      .brand-lockup{
-        width:380px!important;
-        height:88px!important;
-        flex:0 0 380px!important;
-        overflow:visible!important;
-        background:#fff!important;
-        display:flex!important;
-        align-items:center!important;
-        justify-content:flex-start!important;
-      }
-      .brand-lockup::after{content:none!important;display:none!important}
-      .brand-lockup img{
-        display:block!important;
-        visibility:visible!important;
-        width:350px!important;
-        height:82px!important;
-        max-width:100%!important;
-        object-fit:contain!important;
-        object-position:left center!important;
-        background:#fff!important;
-        opacity:1!important;
-        filter:none!important;
-      }
-      @media(max-width:1180px){
-        .brand-lockup{width:320px!important;flex-basis:320px!important}
-        .brand-lockup img{width:295px!important;height:76px!important}
-      }
-      @media(max-width:850px){
-        .brand-lockup{width:225px!important;flex-basis:225px!important;height:70px!important}
-        .brand-lockup img{width:210px!important;height:62px!important}
-      }
-    </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <script>
-      /* Bust any previously cached logo file after React mounts. */
-      const fixLogo = () => {
-        const img = document.querySelector('.brand-lockup img');
-        if (img && !img.dataset.logoFixed) {
-          img.dataset.logoFixed = '1';
-          img.src = '/ministry-logo.png?v=20260906g';
-        }
-      };
-      const observer = new MutationObserver(fixLogo);
-      observer.observe(document.documentElement,{childList:true,subtree:true});
-      window.addEventListener('DOMContentLoaded',fixLogo);
-      window.addEventListener('load',fixLogo);
-    </script>
   </body>
 </html>
