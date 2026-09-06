@@ -51,37 +51,59 @@ const growth = [
 ];
 
 function rasterStyle(mode){
-  const dark = mode === 'dark';
+  const presentation = mode === 'dark';
   return {
     version:8,
-    sources:{base:{type:'raster',tiles: dark
-      ? ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png','https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png']
-      : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution: dark ? '© OpenStreetMap contributors © CARTO' : '© OpenStreetMap contributors'}},
-    layers:[{id:'base',type:'raster',source:'base'}]
+    sources:{
+      base:{
+        type:'raster',
+        tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize:256,
+        attribution:'© OpenStreetMap contributors'
+      }
+    },
+    layers:[{
+      id:'base',
+      type:'raster',
+      source:'base',
+      paint: presentation ? {
+        'raster-brightness-min':0.05,
+        'raster-brightness-max':0.42,
+        'raster-saturation':-0.72,
+        'raster-contrast':0.28
+      } : {
+        'raster-brightness-min':0,
+        'raster-brightness-max':1,
+        'raster-saturation':0,
+        'raster-contrast':0
+      }
+    }]
   };
 }
 
 function historyGeoJSON(year){
   return {type:'FeatureCollection',features:routes.filter(r=>r.year<=year).map(r=>({type:'Feature',properties:{year:r.year,name:r.name},geometry:{type:'LineString',coordinates:r.coords}}))};
 }
-
 function growthGeoJSON(year){
   return {type:'FeatureCollection',features:growth.filter(g=>g.year<=year).slice(-1).map(g=>({type:'Feature',properties:{year:g.year,radius:g.radius},geometry:{type:'Point',coordinates:g.center}}))};
 }
 
-function QatarMap({year,mode,onReady}){
-  const el = useRef(null); const mapRef = useRef(null); const markers = useRef([]);
+function addHistoryLayers(map,year){
+  if(!map.getSource('history')) map.addSource('history',{type:'geojson',data:historyGeoJSON(year)});
+  if(!map.getLayer('history-glow')) map.addLayer({id:'history-glow',type:'line',source:'history',paint:{'line-color':['case',['<',['get','year'],2000],'#d4ad64','#8a1538'],'line-width':['case',['<',['get','year'],2000],7,9],'line-opacity':0.20}});
+  if(!map.getLayer('history-lines')) map.addLayer({id:'history-lines',type:'line',source:'history',paint:{'line-color':['case',['<',['get','year'],2000],'#d4ad64','#8a1538'],'line-width':['case',['<',['get','year'],2000],3.5,4.5],'line-opacity':0.96}});
+  if(!map.getSource('growth')) map.addSource('growth',{type:'geojson',data:growthGeoJSON(year)});
+  if(!map.getLayer('growth-area')) map.addLayer({id:'growth-area',type:'circle',source:'growth',paint:{'circle-radius':['interpolate',['linear'],['zoom'],7,['*',['get','radius'],0.45],12,['*',['get','radius'],2.4]],'circle-color':'#8a1538','circle-opacity':0.08,'circle-stroke-color':'#c9a35e','circle-stroke-opacity':0.45,'circle-stroke-width':1.5}});
+}
 
+function QatarMap({year,mode,onReady}){
+  const el=useRef(null); const mapRef=useRef(null); const markers=useRef([]);
   useEffect(()=>{
-    const map = new maplibregl.Map({container:el.current,style:rasterStyle(mode),center:[51.20,25.35],zoom:8,attributionControl:true,maxBounds:[[50.60,24.35],[52.10,26.35]]});
+    const map=new maplibregl.Map({container:el.current,style:rasterStyle(mode),center:[51.20,25.35],zoom:8,attributionControl:true,maxBounds:[[50.60,24.35],[52.10,26.35]]});
     map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right');
-    mapRef.current = map;
+    mapRef.current=map;
     map.on('load',()=>{
-      map.addSource('history',{type:'geojson',data:historyGeoJSON(year)});
-      map.addLayer({id:'history-glow',type:'line',source:'history',paint:{'line-color':['case',['<',['get','year'],2000],'#d4ad64','#8a1538'],'line-width':['case',['<',['get','year'],2000],7,9],'line-opacity':0.20}});
-      map.addLayer({id:'history-lines',type:'line',source:'history',paint:{'line-color':['case',['<',['get','year'],2000],'#d4ad64','#8a1538'],'line-width':['case',['<',['get','year'],2000],3.5,4.5],'line-opacity':0.96}});
-      map.addSource('growth',{type:'geojson',data:growthGeoJSON(year)});
-      map.addLayer({id:'growth-area',type:'circle',source:'growth',paint:{'circle-radius':['interpolate',['linear'],['zoom'],7,['*',['get','radius'],0.45],12,['*',['get','radius'],2.4]],'circle-color':'#8a1538','circle-opacity':0.08,'circle-stroke-color':'#c9a35e','circle-stroke-opacity':0.45,'circle-stroke-width':1.5}});
+      addHistoryLayers(map,year);
       places.forEach(([name,lng,lat])=>{
         const node=document.createElement('div'); node.className='place-dot'; node.title=name;
         const popup=new maplibregl.Popup({offset:12,closeButton:false}).setHTML(`<b>${name}</b>`);
@@ -101,23 +123,16 @@ function QatarMap({year,mode,onReady}){
   useEffect(()=>{
     const map=mapRef.current; if(!map)return;
     const apply=()=>{
-      const hs=map.getSource('history'); if(hs) hs.setData(historyGeoJSON(year));
-      const gs=map.getSource('growth'); if(gs) gs.setData(growthGeoJSON(year));
+      map.getSource('history')?.setData(historyGeoJSON(year));
+      map.getSource('growth')?.setData(growthGeoJSON(year));
     };
-    if(map.isStyleLoaded()) apply(); else map.once('load',apply);
+    if(map.isStyleLoaded()) apply(); else map.once('idle',apply);
   },[year]);
 
   useEffect(()=>{
     const map=mapRef.current; if(!map)return;
     map.setStyle(rasterStyle(mode));
-    map.once('styledata',()=>{
-      if(map.getSource('history')) return;
-      map.addSource('history',{type:'geojson',data:historyGeoJSON(year)});
-      map.addLayer({id:'history-glow',type:'line',source:'history',paint:{'line-color':['case',['<',['get','year'],2000],'#d4ad64','#8a1538'],'line-width':['case',['<',['get','year'],2000],7,9],'line-opacity':0.20}});
-      map.addLayer({id:'history-lines',type:'line',source:'history',paint:{'line-color':['case',['<',['get','year'],2000],'#d4ad64','#8a1538'],'line-width':['case',['<',['get','year'],2000],3.5,4.5],'line-opacity':0.96}});
-      map.addSource('growth',{type:'geojson',data:growthGeoJSON(year)});
-      map.addLayer({id:'growth-area',type:'circle',source:'growth',paint:{'circle-radius':['interpolate',['linear'],['zoom'],7,['*',['get','radius'],0.45],12,['*',['get','radius'],2.4]],'circle-color':'#8a1538','circle-opacity':0.08,'circle-stroke-color':'#c9a35e','circle-stroke-opacity':0.45,'circle-stroke-width':1.5}});
-    });
+    map.once('styledata',()=>addHistoryLayers(map,year));
   },[mode]);
 
   return <div ref={el} className="maplibre-map"/>;
@@ -126,7 +141,6 @@ function QatarMap({year,mode,onReady}){
 function App(){
   const [year,setYear]=useState(1939); const [playing,setPlaying]=useState(false); const [mode,setMode]=useState('road'); const mapObj=useRef(null);
   const current=useMemo(()=>[...milestones].reverse().find(m=>year>=m.year)||milestones[0],[year]);
-
   useEffect(()=>{if(!playing)return;const t=setInterval(()=>setYear(v=>{if(v>=2026){setPlaying(false);return 2026;}return v+1;}),100);return()=>clearInterval(t);},[playing]);
   useEffect(()=>{const map=mapObj.current;if(!map||!current.focus)return;map.flyTo({center:[current.focus[0],current.focus[1]],zoom:current.focus[2],duration:1300,essential:true});},[current.year]);
   const jump=y=>{setPlaying(false);setYear(y)};
@@ -138,7 +152,6 @@ function App(){
       <div className="title-lockup"><span>INTERACTIVE URBAN HISTORY</span><h1>Qatar Road & Urban Development <b>1939 — 2026</b></h1></div>
       <div className="verified"><span></span> DOCUMENTED MILESTONES</div>
     </header>
-
     <main className="main-grid">
       <section className="map-panel">
         <QatarMap year={year} mode={mode} onReady={m=>mapObj.current=m}/>
@@ -149,16 +162,14 @@ function App(){
           <button onClick={resetQatar}><LocateFixed size={15}/> Qatar</button>
         </div>
         <div className="legend"><span className="lg old"></span>Historic / early corridor <span className="lg modern"></span>Modern expressway milestone <span className="lg growth"></span>Urban-growth footprint</div>
-        <div className="accuracy-note"><Info size={13}/> Current roads and place labels come from OpenStreetMap-based tiles. Historical dates follow documented milestones; coloured corridor geometry is approximate until official historical GIS/aerial layers are supplied.</div>
+        <div className="accuracy-note"><Info size={13}/> Current roads and place labels come from OpenStreetMap tiles. Historical dates follow documented milestones; coloured corridor geometry is approximate until official historical GIS/aerial layers are supplied.</div>
       </section>
-
       <aside className="story-panel">
         <div className="year-block"><span>YEAR</span><strong>{year}</strong><em>{current.ar}</em></div>
         <div className="story-card"><div className="story-year"><Clock3 size={17}/>{current.year}</div><h2>{current.title}</h2><p>{current.text}</p></div>
         <div className="milestones">{milestones.map(m=><button key={m.year} className={year>=m.year?'passed':''} onClick={()=>jump(m.year)}><span>{m.year}</span><i></i><b>{m.title}</b></button>)}</div>
       </aside>
     </main>
-
     <footer className="timeline-dock">
       <button className="play" onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={19}/>:<Play size={19} fill="currentColor"/>}</button>
       <button className="reset" onClick={()=>jump(1939)}><RotateCcw size={16}/></button>
