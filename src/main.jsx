@@ -7,6 +7,10 @@ import './styles.css';
 
 const LOGO_URL = 'https://qatarplatform.net/wp-content/uploads/2024/04/%D8%B4%D8%B9%D8%A7%D8%B1-%D9%88%D8%B2%D8%A7%D8%B1%D8%A9-%D8%A7%D9%84%D8%A8%D9%84%D8%AF%D9%8A%D8%A9-1.png';
 
+// True country framing used whenever the map first loads or the Qatar button is pressed.
+const QATAR_BOUNDS = [[50.70, 24.45], [51.70, 26.20]];
+const QATAR_MAX_BOUNDS = [[50.45, 24.20], [52.05, 26.40]];
+
 const heritageSites = [
   {id:'zubarah',name:'Al Zubarah Archaeological Site',ar:'موقع الزبارة الأثري',municipality:'Al Shamal',category:'Archaeological Site',period:'18th–19th century',year:1760,lng:51.0297,lat:25.9781,summary:'UNESCO World Heritage site and Qatar’s best-preserved historic pearl-fishing and trading town.'},
   {id:'zubarah-fort',name:'Al Zubarah Fort',ar:'قلعة الزبارة',municipality:'Al Shamal',category:'Fort',period:'1938',year:1938,lng:51.0455,lat:25.9769,summary:'Fort overlooking the archaeological town of Al Zubarah and now a major heritage landmark.'},
@@ -46,42 +50,101 @@ function baseStyle(mode){
 
 function siteGeoJSON(sites){return {type:'FeatureCollection',features:sites.map(s=>({type:'Feature',properties:{...s},geometry:{type:'Point',coordinates:[s.lng,s.lat]}}))};}
 function roadsGeoJSON(year){return {type:'FeatureCollection',features:roadMilestones.filter(r=>r.year<=year).map(r=>({type:'Feature',properties:{year:r.year,name:r.name},geometry:{type:'LineString',coordinates:r.coords}}))};}
+function emptyPoint(){return {type:'FeatureCollection',features:[]};}
+function pointGeoJSON(coord){return {type:'FeatureCollection',features:coord?[{type:'Feature',properties:{},geometry:{type:'Point',coordinates:coord}}]:[]};}
+
+function distance2D(a,b){const x=(b[0]-a[0])*Math.cos(((a[1]+b[1])/2)*Math.PI/180);const y=b[1]-a[1];return Math.sqrt(x*x+y*y);}
+function pointAlongRoute(coords,t){
+  if(!coords?.length)return null;if(coords.length===1)return coords[0];
+  const segs=[];let total=0;
+  for(let i=0;i<coords.length-1;i++){const d=distance2D(coords[i],coords[i+1]);segs.push(d);total+=d;}
+  let target=(t%1)*total;
+  for(let i=0;i<segs.length;i++){
+    if(target<=segs[i]){const f=segs[i]?target/segs[i]:0;return [coords[i][0]+(coords[i+1][0]-coords[i][0])*f,coords[i][1]+(coords[i+1][1]-coords[i][1])*f];}
+    target-=segs[i];
+  }
+  return coords[coords.length-1];
+}
 
 function HeritageMap({sites,year,mode,showRoads,onSelect,onReady,selectedId}){
-  const el=useRef(null); const mapRef=useRef(null);
+  const el=useRef(null); const mapRef=useRef(null); const rafRef=useRef(null); const roadStateRef=useRef({year,showRoads});
+
+  useEffect(()=>{roadStateRef.current={year,showRoads};},[year,showRoads]);
+
   useEffect(()=>{
-    const map=new maplibregl.Map({container:el.current,style:baseStyle(mode),center:[51.18,25.52],zoom:7.55,maxBounds:[[50.55,24.30],[52.15,26.35]],attributionControl:true});
-    map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right'); mapRef.current=map;
+    const map=new maplibregl.Map({container:el.current,style:baseStyle(mode),bounds:QATAR_BOUNDS,fitBoundsOptions:{padding:28},maxBounds:QATAR_MAX_BOUNDS,attributionControl:true});
+    map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right');
+    mapRef.current=map;
+
     map.on('load',()=>{
+      // Re-fit after the map knows its actual column size. This prevents Qatar being cropped on reload.
+      requestAnimationFrame(()=>{map.resize();map.fitBounds(QATAR_BOUNDS,{padding:{top:28,bottom:34,left:30,right:30},duration:0});});
+
       map.addSource('heritage',{type:'geojson',data:siteGeoJSON(sites),cluster:true,clusterMaxZoom:11,clusterRadius:48});
       map.addLayer({id:'clusters',type:'circle',source:'heritage',filter:['has','point_count'],paint:{'circle-color':'#8a1538','circle-radius':['step',['get','point_count'],18,5,23,10,28],'circle-stroke-color':'#ffffff','circle-stroke-width':2}});
       map.addLayer({id:'cluster-count',type:'symbol',source:'heritage',filter:['has','point_count'],layout:{'text-field':['get','point_count_abbreviated'],'text-size':12},paint:{'text-color':'#ffffff'}});
       map.addLayer({id:'heritage-points',type:'circle',source:'heritage',filter:['!',['has','point_count']],paint:{'circle-radius':9,'circle-color':['case',['==',['get','id'],selectedId],'#d6aa58','#8a1538'],'circle-stroke-color':'#ffffff','circle-stroke-width':2.5}});
       map.addLayer({id:'heritage-labels',type:'symbol',source:'heritage',filter:['!',['has','point_count']],minzoom:8.3,layout:{'text-field':['get','name'],'text-size':10,'text-offset':[0,1.7],'text-anchor':'top','text-allow-overlap':false},paint:{'text-color':'#4a1730','text-halo-color':'#ffffff','text-halo-width':1.3}});
+
       map.addSource('roads',{type:'geojson',data:roadsGeoJSON(year)});
-      map.addLayer({id:'roads-history',type:'line',source:'roads',layout:{visibility:showRoads?'visible':'none'},paint:{'line-color':['case',['<',['get','year'],2000],'#d3a65d','#8a1538'],'line-width':4,'line-opacity':0.88}});
+      map.addLayer({id:'roads-history-glow',type:'line',source:'roads',layout:{visibility:showRoads?'visible':'none'},paint:{'line-color':['case',['<',['get','year'],2000],'#e2bd72','#b31649'],'line-width':8,'line-opacity':0.13}});
+      map.addLayer({id:'roads-history',type:'line',source:'roads',layout:{visibility:showRoads?'visible':'none'},paint:{'line-color':['case',['<',['get','year'],2000],'#d3a65d','#8a1538'],'line-width':3.2,'line-opacity':0.72}});
+
+      // GPS-style travelling activation point.
+      map.addSource('gps-pulse',{type:'geojson',data:emptyPoint()});
+      map.addLayer({id:'gps-halo',type:'circle',source:'gps-pulse',layout:{visibility:showRoads?'visible':'none'},paint:{'circle-radius':12,'circle-color':'#ffffff','circle-opacity':0.18,'circle-blur':0.35}});
+      map.addLayer({id:'gps-core',type:'circle',source:'gps-pulse',layout:{visibility:showRoads?'visible':'none'},paint:{'circle-radius':5,'circle-color':'#ffffff','circle-stroke-color':'#8a1538','circle-stroke-width':3,'circle-opacity':1}});
+
       map.on('click','heritage-points',e=>{const p=e.features?.[0]?.properties;if(p)onSelect(p.id);});
       map.on('click','clusters',e=>{const f=e.features?.[0];if(!f)return;const id=f.properties.cluster_id;map.getSource('heritage').getClusterExpansionZoom(id).then(z=>map.easeTo({center:f.geometry.coordinates,zoom:z}));});
-      map.on('mouseenter','heritage-points',()=>map.getCanvas().style.cursor='pointer'); map.on('mouseleave','heritage-points',()=>map.getCanvas().style.cursor='');
+      map.on('mouseenter','heritage-points',()=>map.getCanvas().style.cursor='pointer');
+      map.on('mouseleave','heritage-points',()=>map.getCanvas().style.cursor='');
+
+      const started=performance.now();
+      const animate=(now)=>{
+        const {year:activeYear,showRoads:roadsVisible}=roadStateRef.current;
+        const active=roadMilestones.filter(r=>r.year<=activeYear).slice(-1)[0];
+        const src=map.getSource('gps-pulse');
+        if(src){
+          if(roadsVisible&&active){const t=((now-started)%5200)/5200;src.setData(pointGeoJSON(pointAlongRoute(active.coords,t)));}
+          else src.setData(emptyPoint());
+        }
+        rafRef.current=requestAnimationFrame(animate);
+      };
+      rafRef.current=requestAnimationFrame(animate);
       onReady(map);
     });
-    return()=>map.remove();
+
+    const handleResize=()=>{map.resize();};
+    window.addEventListener('resize',handleResize);
+    return()=>{window.removeEventListener('resize',handleResize);if(rafRef.current)cancelAnimationFrame(rafRef.current);map.remove();};
   },[]);
+
   useEffect(()=>{const map=mapRef.current;if(!map)return;const s=map.getSource('heritage');if(s)s.setData(siteGeoJSON(sites));},[sites]);
   useEffect(()=>{const map=mapRef.current;if(!map)return;const s=map.getSource('roads');if(s)s.setData(roadsGeoJSON(year));},[year]);
-  useEffect(()=>{const map=mapRef.current;if(map?.getLayer('roads-history'))map.setLayoutProperty('roads-history','visibility',showRoads?'visible':'none');},[showRoads]);
-  useEffect(()=>{const map=mapRef.current;if(!map)return;map.setStyle(baseStyle(mode));map.once('styledata',()=>{});},[mode]);
+  useEffect(()=>{
+    const map=mapRef.current;if(!map)return;
+    ['roads-history-glow','roads-history','gps-halo','gps-core'].forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility',showRoads?'visible':'none');});
+  },[showRoads]);
+  useEffect(()=>{
+    const map=mapRef.current;if(!map?.getLayer('base'))return;
+    map.setPaintProperty('base','raster-brightness-max',mode==='dark'?0.46:1);
+    map.setPaintProperty('base','raster-saturation',mode==='dark'?-0.85:0);
+    map.setPaintProperty('base','raster-contrast',mode==='dark'?0.22:0);
+  },[mode]);
+
   return <div ref={el} className="maplibre-map"/>;
 }
 
 function App(){
-  const [year,setYear]=useState(2026),[playing,setPlaying]=useState(false),[mode,setMode]=useState('road'),[showRoads,setShowRoads]=useState(false);
+  const [year,setYear]=useState(2026),[playing,setPlaying]=useState(false),[mode,setMode]=useState('road'),[showRoads,setShowRoads]=useState(true);
   const [query,setQuery]=useState(''),[category,setCategory]=useState('All'),[selectedId,setSelectedId]=useState('zubarah'); const mapObj=useRef(null);
   const selected=heritageSites.find(s=>s.id===selectedId)||heritageSites[0];
   const filtered=useMemo(()=>heritageSites.filter(s=>(category==='All'||s.category===category)&&(!query||`${s.name} ${s.ar} ${s.municipality} ${s.category}`.toLowerCase().includes(query.toLowerCase()))),[query,category]);
   useEffect(()=>{if(!playing)return;const t=setInterval(()=>setYear(v=>v>=2026?(setPlaying(false),2026):v+1),120);return()=>clearInterval(t)},[playing]);
+
   const chooseSite=id=>{setSelectedId(id);const s=heritageSites.find(x=>x.id===id);if(s&&mapObj.current)mapObj.current.flyTo({center:[s.lng,s.lat],zoom:12,duration:900});};
-  const resetQatar=()=>mapObj.current?.flyTo({center:[51.18,25.52],zoom:7.55,duration:900});
+  const resetQatar=()=>{const map=mapObj.current;if(!map)return;map.resize();map.fitBounds(QATAR_BOUNDS,{padding:{top:28,bottom:34,left:30,right:30},duration:900});};
 
   return <div className="app-shell heritage-app">
     <header className="topbar">
@@ -102,7 +165,7 @@ function App(){
         <HeritageMap sites={filtered} year={year} mode={mode} showRoads={showRoads} selectedId={selectedId} onSelect={chooseSite} onReady={m=>mapObj.current=m}/>
         <div className="map-overlay-title"><span>QATAR HERITAGE MAP</span><strong>{filtered.length}</strong><em>visible places</em></div>
         <div className="map-switch"><button className={mode==='road'?'active':''} onClick={()=>setMode('road')}><MapIcon size={15}/> Map</button><button className={mode==='dark'?'active':''} onClick={()=>setMode('dark')}><Moon size={15}/> Presentation</button><button className={showRoads?'active':''} onClick={()=>setShowRoads(v=>!v)}><Route size={15}/> Road history</button><button onClick={resetQatar}><LocateFixed size={15}/> Qatar</button></div>
-        <div className="map-help"><Layers3 size={13}/> Click any heritage marker to explore the place. Cluster circles expand as you zoom in.</div>
+        <div className="map-help"><Layers3 size={13}/> Click any heritage marker to explore. The glowing GPS pulse shows the direction of the latest active road milestone.</div>
       </section>
 
       <aside className="detail-panel">
