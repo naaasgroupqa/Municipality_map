@@ -1,1 +1,0 @@
-Header logo is served from public/ministry-logo.png. The application also includes a text fallback if the image cannot load.
